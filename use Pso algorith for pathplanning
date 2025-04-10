@@ -1,0 +1,89 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define environment
+GRID_SIZE = (20, 20)
+START = np.array([0, 0])
+GOAL = np.array([19, 19])
+OBSTACLES = [(10, i) for i in range(5, 16)]  # Vertical wall
+
+# PSO parameters
+NUM_PARTICLES = 30
+NUM_WAYPOINTS = 5
+NUM_ITERATIONS = 100
+W = 0.5      # inertia
+C1 = 1.0     # personal best weight
+C2 = 2.0     # global best weight
+
+def is_collision(p1, p2):
+    """Check if a line between p1 and p2 hits any obstacle (simplified)"""
+    steps = 10
+    for t in np.linspace(0, 1, steps):
+        x = int(p1[0] * (1 - t) + p2[0] * t)
+        y = int(p1[1] * (1 - t) + p2[1] * t)
+        if (x, y) in OBSTACLES:
+            return True
+    return False
+
+def path_cost(path):
+    """Calculate cost of a path including obstacle penalties"""
+    cost = 0
+    path_points = [START] + path + [GOAL]
+    for i in range(len(path_points) - 1):
+        if is_collision(path_points[i], path_points[i + 1]):
+            cost += 1e6  # High penalty
+        else:
+            cost += np.linalg.norm(path_points[i + 1] - path_points[i])
+    return cost
+
+# Initialize particles
+particles = [np.random.randint(0, GRID_SIZE[0], size=(NUM_WAYPOINTS, 2)) for _ in range(NUM_PARTICLES)]
+velocities = [np.zeros_like(p) for p in particles]
+personal_best = list(particles)
+personal_best_scores = [path_cost(p.tolist()) for p in particles]
+
+# Global best
+global_best = personal_best[np.argmin(personal_best_scores)]
+global_best_score = min(personal_best_scores)
+
+# PSO loop
+for iteration in range(NUM_ITERATIONS):
+    for i in range(NUM_PARTICLES):
+        r1, r2 = np.random.rand(), np.random.rand()
+        velocities[i] = (
+            W * velocities[i] +
+            C1 * r1 * (personal_best[i] - particles[i]) +
+            C2 * r2 * (global_best - particles[i])
+        )
+        particles[i] = np.clip(particles[i] + velocities[i], 0, GRID_SIZE[0]-1).astype(int)
+        
+        score = path_cost(particles[i].tolist())
+        if score < personal_best_scores[i]:
+            personal_best[i] = particles[i]
+            personal_best_scores[i] = score
+            if score < global_best_score:
+                global_best = particles[i]
+                global_best_score = score
+
+print("Best path cost:", global_best_score)
+
+# Visualization
+plt.figure(figsize=(8, 8))
+# Draw grid
+for x in range(GRID_SIZE[0]):
+    for y in range(GRID_SIZE[1]):
+        if (x, y) in OBSTACLES:
+            plt.plot(x, y, 'ks')
+# Draw best path
+path = [START] + global_best.tolist() + [GOAL]
+px, py = zip(*path)
+plt.plot(px, py, 'r-o', label="Best Path")
+plt.plot(*START, 'go', label="Start")
+plt.plot(*GOAL, 'bo', label="Goal")
+plt.grid(True)
+plt.legend()
+plt.title("Path Planning using PSO")
+plt.xlim(-1, GRID_SIZE[0])
+plt.ylim(-1, GRID_SIZE[1])
+plt.gca().set_aspect('equal')
+plt.show()
